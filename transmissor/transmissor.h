@@ -41,7 +41,7 @@ typedef struct {
 
 unsigned char compute_checksum(message* msg);
 
-message create_message(unsigned char size, unsigned char sequence, unsigned char type, unsigned char data);
+message create_message(unsigned char size, unsigned char sequence, unsigned char type, unsigned char *data);
 
 int cria_raw_socket(char* nome_interface_rede);
 

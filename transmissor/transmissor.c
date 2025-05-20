@@ -24,7 +24,7 @@ message create_message(unsigned char size, unsigned char sequence, unsigned char
     msg.size = size;
     msg.sequence = sequence;
     msg.type = type;
-    msg.data = data;
+    memcpy(msg.data, data, size);
     msg.checksum = compute_checksum(&msg);
 
     return msg;
