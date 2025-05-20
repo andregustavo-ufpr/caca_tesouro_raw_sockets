@@ -7,8 +7,27 @@
 #include <net/if.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
-#define TIMEOUT 300 // tempo pra timeout em milisegundos
+#define TIMEOUT 300 // tempo pra timeout em milisegundos'
+
+#define TYPE_ACK 0
+#define TYPE_NACK 1
+#define TYPE_OKACK 2
+#define TYPE_SIZE 4
+#define TYPE_DATA 5
+#define TYPE_TEXTACKNAME 6
+#define TYPE_VIDEOACKNAME 7
+#define TYPE_IMAGEACKNAME 8
+#define TYPE_ENDOFFILE 9
+#define TYPE_MOVERIGHT 10
+#define TYPE_MOVEUP 11
+#define TYPE_MOVEDOWN 12
+#define TYPE_MOVELEFT 13
+#define TYPE_ERROR 15
 
 // mensagem no formato do protocolo
 typedef struct {
@@ -18,6 +37,11 @@ typedef struct {
   unsigned char checksum; // 8 bits (byte)
   unsigned char data[128]; // tamanho maximo (127) + 1 para caber \0
 } message;
+
+
+unsigned char compute_checksum(message* msg);
+
+message create_message(unsigned char size, unsigned char sequence, unsigned char type, unsigned char data);
 
 int cria_raw_socket(char* nome_interface_rede);
 

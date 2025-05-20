@@ -1,8 +1,34 @@
 #include "transmissor.h"
-#include <errno.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
+
+unsigned char compute_checksum(message* msg) {
+    unsigned int sum = 0;
+
+    // Include the fields in the checksum calculation
+    sum += msg->size;
+    sum += msg->sequence;
+    sum += msg->type;
+
+    // Only use the relevant part of data: size indicates the actual data length (max 127)
+    for (int i = 0; i < msg->size; i++) {
+        sum += msg->data[i];
+    }
+
+    // Return the result modulo 256 (fit into one byte)
+    return (unsigned char)(sum % 256);
+}
+
+
+message create_message(unsigned char size, unsigned char sequence, unsigned char type, unsigned char *data){
+    message msg;
+    
+    msg.size = size;
+    msg.sequence = sequence;
+    msg.type = type;
+    msg.data = data;
+    msg.checksum = compute_checksum(&msg);
+
+    return msg;
+}
 
 int cria_raw_socket(char* nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo

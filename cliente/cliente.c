@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "transmissor.h"
 
 int currentXPos = 0;
 int currentYPos = 0;
@@ -42,6 +43,10 @@ int main(){
         }
         printf("\n");
         scanf(" %d %d", &currentYPos, &currentXPos);
+
+        // TODO:
+        // Send message to server
+        // Await for server response and check for OK type
     }
     return 0;
 }
