@@ -5,6 +5,13 @@
 #define X_AXIS 0
 #define Y_AXIS 1
 
+typedef struct {
+    int x;
+    int y;
+} Coord;
+
+Coord *treasures;
+
 int storedClientXPos = 0;
 int storedClientYPos = 0;
 
@@ -54,6 +61,22 @@ int message_handler(message* m){
     }
 
     return -1;
+}
+
+void choose_random_coordinates(Coord coords[9]) {
+    int used[9][9] = {0};
+    srand(time(NULL));
+    int count = 0;
+    while (count < 9) {
+        int x = rand() % 9;
+        int y = rand() % 9;
+        if (!used[x][y]) {
+            coords[count].x = x;
+            coords[count].y = y;
+            used[x][y] = 1;
+            count++;
+        }
+    }
 }
 
 int main(){
