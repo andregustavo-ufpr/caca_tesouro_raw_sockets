@@ -1,15 +1,17 @@
 TARGET = client_machine
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -Iservidor -Itransmissor -Icliente
+SRC = cliente/cliente.c servidor/servidor.c transmissor/transmissor.c
+OBJ = $(SRC:.c=.o)
 
-$(TARGET): cliente.o transmissor.o
-	$(CC) $(CFLAGS) -o $(TARGET) cliente.o transmissor.o
+# Rules
+all: $(TARGET)
 
-cliente.o: cliente/cliente.c transmissor/transmissor.h
-	$(CC) $(CFLAGS) -c cliente/cliente.c
+$(TARGET): $(OBJ)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
-transmissor.o: transmissor/transmissor.c transmissor/transmissor.h
-	$(CC) $(CFLAGS) -c transmissor/transmissor.c
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(TARGET) *.o transmissor/*.o cliente/*.o servidor/*.o

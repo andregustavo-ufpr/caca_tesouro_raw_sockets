@@ -1,6 +1,7 @@
 #include "transmissor.h"
+#include <time.h>
 
-#define TIMEOUT 5000
+#define MAX_TREASURES 9
 
 #define X_AXIS 0
 #define Y_AXIS 1
@@ -10,7 +11,7 @@ typedef struct {
     int y;
 } Coord;
 
-Coord *treasures;
+Coord treasures[MAX_TREASURES];
 
 int storedClientXPos = 0;
 int storedClientYPos = 0;
@@ -20,8 +21,9 @@ int socket;
 int move_character(int axis, int position){
     if(position < 0){
         printf("Invalid movement");
-        if(socket != NULL){
-            message error = create_message(0, 0, TYPE_ERROR, "");
+        if(socket != 0){
+            unsigned char *empty_data = NULL;
+            message error = create_message(0, 0, TYPE_ERROR, empty_data);
             message_send(socket, error);    
         }
 
@@ -63,13 +65,13 @@ int message_handler(message* m){
     return -1;
 }
 
-void choose_random_coordinates(Coord coords[9]) {
+void choose_random_coordinates(Coord coords[MAX_TREASURES]) {
     int used[9][9] = {0};
     srand(time(NULL));
     int count = 0;
-    while (count < 9) {
-        int x = rand() % 9;
-        int y = rand() % 9;
+    while (count < MAX_TREASURES) {
+        int x = rand() % MAX_TREASURES;
+        int y = rand() % MAX_TREASURES;
         if (!used[x][y]) {
             coords[count].x = x;
             coords[count].y = y;
@@ -80,8 +82,10 @@ void choose_random_coordinates(Coord coords[9]) {
 }
 
 int main(){
-    socket = 0;// cria_raw_socket(""); Make connection with client
-    message* recieved_message;
+    socket = 0; // cria_raw_socket(""); Make connection with client
+    message* recieved_message = NULL;
+
+    choose_random_coordinates(treasures);
 
     while(1){
         int recieved = message_receive(socket, recieved_message, TIMEOUT);
@@ -90,7 +94,8 @@ int main(){
             int computed = message_handler(recieved_message);
 
             if(computed != -1){
-                message ok_msg = create_message(0, 0, TYPE_OKACK, NULL);
+                unsigned char *empty_data = NULL;
+                message ok_msg = create_message(0, 0, TYPE_OKACK, empty_data);
 
                 message_send(socket, ok_msg);
             }
