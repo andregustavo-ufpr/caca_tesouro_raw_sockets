@@ -16,15 +16,15 @@ Coord treasures[MAX_TREASURES];
 int storedClientXPos = 0;
 int storedClientYPos = 0;
 
-int socket;
+int r_socket;
 
 int move_character(int axis, int position){
     if(position < 0){
         printf("Invalid movement");
-        if(socket != 0){
+        if(r_socket != 0){
             unsigned char *empty_data = NULL;
             message error = create_message(0, 0, TYPE_ERROR, empty_data);
-            message_send(socket, error);    
+            message_send(r_socket, error);    
         }
 
         return -1;
@@ -82,13 +82,13 @@ void choose_random_coordinates(Coord coords[MAX_TREASURES]) {
 }
 
 int main(){
-    socket = 0; // cria_raw_socket(""); Make connection with client
+    r_socket = cria_raw_r_socket(""); // Make connection with client
     message* recieved_message = NULL;
 
     choose_random_coordinates(treasures);
 
     while(1){
-        int recieved = message_receive(socket, recieved_message, TIMEOUT);
+        int recieved = message_receive(r_socket, recieved_message, TIMEOUT);
 
         if(recieved != -1){
             int computed = message_handler(recieved_message);
@@ -97,7 +97,7 @@ int main(){
                 unsigned char *empty_data = NULL;
                 message ok_msg = create_message(0, 0, TYPE_OKACK, empty_data);
 
-                message_send(socket, ok_msg);
+                message_send(r_socket, ok_msg);
             }
         }
     }
