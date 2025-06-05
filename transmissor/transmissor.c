@@ -94,7 +94,7 @@ int message_receive(int socket, message *m, long long timeout) {
     int buffer_n = recv(socket, buffer, BUFFERN, 0);
     if (buffer_n == -1)
       continue;
-    printf("received buffer of size: %d\n", buffer_n);
+    // printf("received buffer of size: %d\n", buffer_n);
 
     // search for start symbol
     int start_index = -1;
@@ -105,7 +105,7 @@ int message_receive(int socket, message *m, long long timeout) {
       }
     if (start_index == -1)
       continue;
-    printf("start symbol found at %d\n", start_index);
+    // printf("start symbol found at %d\n", start_index);
 
     unsigned char m_size = (buffer[start_index + 1] >> 1) & 0x7f;
     unsigned char m_sequence = (buffer[start_index + 1] & 0xfe) |
