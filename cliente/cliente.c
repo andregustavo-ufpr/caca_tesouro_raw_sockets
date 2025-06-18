@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "../transmissor/transmissor.h"
 
-#define USINGLOOPBACK
+// #define USINGLOOPBACK
 
 int currentXPos = 0;
 int currentYPos = 0;
@@ -121,7 +121,6 @@ int main(int argc, char** argv){
                 default:
                     fprintf(stderr, "Mensagem de tipo inesperado: %d\n",
                             received.type);
-                    exit(1);
                     break;
             }
         }

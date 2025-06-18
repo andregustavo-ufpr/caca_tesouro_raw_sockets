@@ -3,7 +3,7 @@
 #include <time.h>
 
 #define MAX_TREASURES 9
-#define USINGLOOPBACK 
+// #define USINGLOOPBACK 
 
 typedef struct {
     int x;
@@ -56,7 +56,7 @@ int message_handler(message* m){
         case TYPE_MOVEDOWN:
             if(move_character(&storedClientXPos, &storedClientYPos, m->type) == -1){
                 // In case of an error inside move_character function
-                break;
+                return -2;
             }
 
             // TODO: check if player is on treasure
@@ -116,14 +116,14 @@ int main(int argc, char** argv){
             printf("received type %d\n", recieved_message.type);
             int computed = message_handler(&recieved_message);
 
-            if(computed != -1){
+            if (computed == 0) {
                 message ok_msg = create_message(0, 0, TYPE_OKACK, NULL);
 
                 message_send(r_socket, ok_msg);
                 #ifdef USINGLOOPBACK
                 message_receive(r_socket, &dummy, TIMEOUT);
                 #endif
-            } else {
+            } else if (computed == -2) {
                 message err_msg = create_message(0, 0, TYPE_ERROR, NULL);
 
                 message_send(r_socket, err_msg);
