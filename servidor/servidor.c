@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <dirent.h>
 
-#define MAX_TREASURES 9
+#define MAX_TREASURES 8
 // #define USINGLOOPBACK 
 
 typedef struct {
@@ -17,6 +18,26 @@ int storedClientXPos = 0;
 int storedClientYPos = 0;
 
 int r_socket;
+
+void find_object(int n, char* out_path){
+    DIR* dir = opendir("objects");
+    if (!dir) {
+        fprintf(stderr, "Falha ao abrir objects\n");
+        exit(1);
+    }
+
+    struct dirent* entry;
+    char prefix[8];
+    snprintf(prefix, sizeof(prefix), "%d.", n);
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) {
+            strcpy(out_path, entry->d_name);
+            closedir(dir);
+            return;
+        }
+    }
+}
 
 int move_character(int* positionX, int* positionY, int type){
     int newX = *positionX;
@@ -61,8 +82,13 @@ int message_handler(message* m){
             }
 
             // TODO: check if player is on treasure
+            for (int i = 0; i < MAX_TREASURES; ++i) {
+                if (treasures[i].x == storedClientXPos && treasures[i].y == storedClientYPos) {
+                    return i + 1;
+                }
+            }
             
-            return 0;
+            return 0; 
         default:
             fprintf(stderr, "Mensagem de tipo inesperado %d\n", m->type);
             return -1;
@@ -122,7 +148,14 @@ int main(int argc, char** argv){
             printf("received type %d\n", recieved_message.type);
             int computed = message_handler(&recieved_message);
 
-            if (computed == 0) {
+            
+            if (computed > 0) {
+                char object_name[64];
+                printf("Tesouro %d encontrado\n", computed);
+                find_object(computed, object_name);
+                printf("Tesouro: %s\n", object_name);
+            }
+            else if (computed == 0) {
                 message ok_msg = create_message(0, 0, TYPE_OKACK, NULL);
 
                 message_send(r_socket, ok_msg);

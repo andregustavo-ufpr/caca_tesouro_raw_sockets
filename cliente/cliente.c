@@ -9,6 +9,11 @@ int currentYPos = 0;
 #define MAX_TIMEOUT 2048
 long long timeout = 1;
 
+void display_video(char* filename) {}
+void display_text(char* filename) {}
+void display_image(char* filename) {}
+void receive_file(message* m, void (*display) (char*)) {}
+
 void printGrid() {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
@@ -123,10 +128,16 @@ int main(int argc, char** argv){
                     break;
                 // TODO: get files
                 case TYPE_VIDEOACKNAME:
+                    printf("Receiving video\n");
+                    receive_file(&received, display_video);
                     break;
                 case TYPE_IMAGEACKNAME:
+                    printf("Receiving image\n");
+                    receive_file(&received, display_image);
                     break;
                 case TYPE_TEXTACKNAME:
+                    printf("Receiving text\n");
+                    receive_file(&received, display_text);
                     break;
                 default:
                     fprintf(stderr, "Mensagem de tipo inesperado: %d\n",
