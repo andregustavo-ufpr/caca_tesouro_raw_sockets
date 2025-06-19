@@ -1,4 +1,5 @@
 #include "../transmissor/transmissor.h"
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -75,8 +76,8 @@ void choose_random_coordinates(Coord coords[MAX_TREASURES]) {
     srand(time(NULL));
     int count = 0;
     while (count < MAX_TREASURES) {
-        int x = rand() % MAX_TREASURES;
-        int y = rand() % MAX_TREASURES;
+        int x = rand() % 8;
+        int y = rand() % 8;
         if (!used[x][y]) {
             coords[count].x = x;
             coords[count].y = y;
@@ -100,6 +101,11 @@ int main(int argc, char** argv){
     #endif
 
     choose_random_coordinates(treasures);
+    printf("Locais de tesouro:\n");
+    for (int i = 0; i < MAX_TREASURES; ++i) {
+        printf("%d %d    ", treasures[i].x, treasures[i].y);
+    }
+    printf("\n");
 
     while(1){
         #ifdef USINGLOOPBACK

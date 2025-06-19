@@ -6,6 +6,9 @@
 int currentXPos = 0;
 int currentYPos = 0;
 
+#define MAX_TIMEOUT 2048
+long long timeout = 1;
+
 void printGrid() {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
@@ -89,10 +92,17 @@ int main(int argc, char** argv){
             #ifdef USINGLOOPBACK
             message_receive(socket, &dummy, 300);
             #endif
-            if (message_receive(socket, &received, 300) == -1) {
-                fprintf(stderr, "Resposta nao recebida\n");
-                exit(1);
+            while (message_receive(socket, &received, timeout) == -1) {
+                printf("timeout: %lld\n", timeout);
+                timeout *= 2;
+                if (timeout > MAX_TIMEOUT) {
+                    fprintf(stderr, "Resposta nao recebida. Reenviando\n");
+                    timeout = 1;
+                    continue;
+                }
             }
+            timeout = 1;
+
             if (compute_checksum(&received) != received.checksum) {
                 printf("checksum fail\n");
                 continue;
@@ -121,7 +131,7 @@ int main(int argc, char** argv){
                 default:
                     fprintf(stderr, "Mensagem de tipo inesperado: %d\n",
                             received.type);
-                    break;
+                    continue;
             }
         }
     }
