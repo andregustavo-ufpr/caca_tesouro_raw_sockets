@@ -1,4 +1,5 @@
 #include "../transmissor/transmissor.h"
+#include "../coordinates/coordinates.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -6,11 +7,6 @@
 
 #define MAX_TREASURES 8
 // #define USINGLOOPBACK 
-
-typedef struct {
-    int x;
-    int y;
-} Coord;
 
 Coord treasures[MAX_TREASURES];
 
