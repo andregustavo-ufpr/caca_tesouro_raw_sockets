@@ -6,7 +6,8 @@
 #include <dirent.h>
 
 #define MAX_TREASURES 8
-// #define USINGLOOPBACK 
+#define CHUNK_SIZE 127
+#define USINGLOOPBACK 
 
 Coord treasures[MAX_TREASURES];
 
@@ -15,9 +16,33 @@ int storedClientYPos = 0;
 
 int r_socket;
 
+
+void send_file_in_chunks(unsigned char **file_chunks, int size, int batches, const char *file_path) {
+    int sequence = 0;
+
+    message start_message = create_message(sizeof(file_path), sequence, TYPE_TEXTACKNAME, (unsigned char *) file_path);
+    message_send(r_socket, start_message);
+    sequence++;
+
+    message size_message = create_message(sizeof(size), sequence, TYPE_SIZE,  (unsigned char*)&size);
+    message_send(r_socket, size_message);
+    sequence++;
+    
+    for(int i = 0; i < batches; i++){
+        message file_piece = create_message(CHUNK_SIZE, sequence, TYPE_DATA, file_chunks[i]);
+        message_send(r_socket, file_piece);
+        sequence++;
+    }
+
+    message end_message = create_message(0, sequence, TYPE_ENDOFFILE, NULL);
+    message_send(r_socket, end_message);
+
+    return;
+}
+
 void find_object(int n, char* out_path){
-    DIR* dir = opendir("objects");
-    if (!dir) {
+    DIR* directory = opendir("objects");
+    if (!directory) {
         fprintf(stderr, "Falha ao abrir objects\n");
         exit(1);
     }
@@ -26,10 +51,20 @@ void find_object(int n, char* out_path){
     char prefix[8];
     snprintf(prefix, sizeof(prefix), "%d.", n);
 
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(directory)) != NULL) {
         if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) {
             strcpy(out_path, entry->d_name);
-            closedir(dir);
+            
+            char full_path[8] = "objects/";
+            sprintf(full_path + strlen(full_path), "%s", out_path);
+            int file_size = 0;
+            int batches_qtt = 0;
+            unsigned char **separated_file;
+            
+            separated_file = split_file(full_path, &file_size, &batches_qtt);
+            send_file_in_chunks(separated_file, file_size, batches_qtt, out_path);
+
+            closedir(directory);
             return;
         }
     }
@@ -77,7 +112,6 @@ int message_handler(message* m){
                 return -2;
             }
 
-            // TODO: check if player is on treasure
             for (int i = 0; i < MAX_TREASURES; ++i) {
                 if (treasures[i].x == storedClientXPos && treasures[i].y == storedClientYPos) {
                     return i + 1;
@@ -147,8 +181,8 @@ int main(int argc, char** argv){
             
             if (computed > 0) {
                 char object_name[64];
-                printf("Tesouro %d encontrado\n", computed);
-                find_object(computed, object_name);
+                printf("Tesouro %d encontrado\n", 1);
+                find_object(1, object_name);
                 printf("Tesouro: %s\n", object_name);
             }
             else if (computed == 0) {
