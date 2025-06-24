@@ -1,7 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "../transmissor/transmissor.h"
+#include <unistd.h>
+#include<sys/wait.h>
 
-// #define USINGLOOPBACK
+// #define USER "user"
+// #define UID 1000
 
 int currentXPos = 0;
 int currentYPos = 0;
@@ -9,10 +14,71 @@ int currentYPos = 0;
 #define MAX_TIMEOUT 2048
 long long timeout = 1;
 
-void display_video(char* filename) {}
-void display_text(char* filename) {}
-void display_image(char* filename) {}
-void receive_file(message* m, void (*display) (char*)) {}
+void display_image(char* filename) {
+    char command[256];
+    sprintf(command, "sudo -u %s DISPLAY=:0 XAUTHORITY=/home/%s/.Xauthority XDG_RUNTIME_DIR=/run/user/%d firefox %s", USER, USER, UID, filename);
+    system(command);
+}
+void display_video(char* filename) {
+    display_image(filename);
+}
+void display_text(char* filename) {
+    if (fork() == 0) {
+        char* args[] = {"cat", filename, NULL};
+        execve("/bin/cat", args, NULL);
+    } else {
+        wait(NULL);
+    }
+}
+
+void receive_file(int socket, message* m, void (*display) (char*)) {
+    message ack = create_message(0, 0, TYPE_ACK, NULL);
+    message nack = create_message(0, 0, TYPE_NACK, NULL);
+    message response;
+    int bytes_received = 0;
+    int last_sequence_received;
+    int expected_sequence;
+    char filename[64];
+
+    memcpy(filename, m->data, 5);
+ 
+    // receives size message
+    do {
+        message_send_and_receive(socket, &ack, &response);
+    } while (response.type != TYPE_SIZE);
+    int file_size = *(int*) response.data;
+    unsigned char* data = malloc(file_size);
+    message_send_and_receive(socket, &ack, &response);
+
+    // receives data
+    last_sequence_received = -1;
+    while (response.type == TYPE_DATA) {
+        expected_sequence = (last_sequence_received + 1) % 32;
+        if (expected_sequence == response.sequence) {
+            last_sequence_received = response.sequence;
+            memcpy(&data[bytes_received], response.data, response.size);
+            bytes_received += response.size;
+            ack = create_message(0, response.sequence, TYPE_ACK, NULL);
+        } else {
+            ack = create_message(0, last_sequence_received, TYPE_ACK, NULL);
+        }
+        message_send_and_receive(socket, &ack, &response);
+    }
+
+    if (response.type == TYPE_ENDOFFILE) {
+        message_send(socket, ack);
+    }
+
+    FILE* f = fopen(filename, "wb");
+    fwrite(data, file_size, 1, f);
+    fclose(f);
+
+    display(filename);
+}
+
+
+
+
 
 void printGrid() {
     for (int i = 0; i < 8; i++) {
@@ -88,30 +154,7 @@ int main(int argc, char** argv){
 
         // Send message to server
         while (!message_all_ok) {
-            message_send(socket, m);
-            #ifdef USINGLOOPBACK
-            message_receive(socket, &dummy, 300);
-            #endif
-            // Await for server response and check for OK type
-            // TODO: add proper exponential timeout
-            #ifdef USINGLOOPBACK
-            message_receive(socket, &dummy, 300);
-            #endif
-            while (message_receive(socket, &received, timeout) == -1) {
-                printf("timeout: %lld\n", timeout);
-                timeout *= 2;
-                if (timeout > MAX_TIMEOUT) {
-                    fprintf(stderr, "Resposta nao recebida. Reenviando\n");
-                    timeout = 1;
-                    continue;
-                }
-            }
-            timeout = 1;
-
-            if (compute_checksum(&received) != received.checksum) {
-                printf("checksum fail\n");
-                continue;
-            }
+            message_send_and_receive(socket, &m, &received);
             switch (received.type) {
                 case TYPE_OKACK:
                 case TYPE_ACK:
@@ -126,18 +169,26 @@ int main(int argc, char** argv){
                     fprintf(stderr, "Movimento invalido\n");
                     exit(1);
                     break;
-                // TODO: get files
                 case TYPE_VIDEOACKNAME:
                     printf("Receiving video\n");
-                    receive_file(&received, display_video);
+                    receive_file(socket, &received, display_video);
+                    currentXPos = newXPos;
+                    currentYPos = newYPos;
+                    message_all_ok = 1;
                     break;
                 case TYPE_IMAGEACKNAME:
                     printf("Receiving image\n");
-                    receive_file(&received, display_image);
+                    receive_file(socket, &received, display_image);
+                    currentXPos = newXPos;
+                    currentYPos = newYPos;
+                    message_all_ok = 1;
                     break;
                 case TYPE_TEXTACKNAME:
                     printf("Receiving text\n");
-                    receive_file(&received, display_text);
+                    receive_file(socket, &received, display_text);
+                    currentXPos = newXPos;
+                    currentYPos = newYPos;
+                    message_all_ok = 1;
                     break;
                 default:
                     fprintf(stderr, "Mensagem de tipo inesperado: %d\n",

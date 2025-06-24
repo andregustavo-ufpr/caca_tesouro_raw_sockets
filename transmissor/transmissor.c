@@ -1,5 +1,19 @@
 #include "transmissor.h"
+#include <linux/limits.h>
+#include <stdio.h>
 #include <sys/stat.h>
+
+void message_debug_print(message* m) {
+  printf("checksum = %d\n", m->checksum);
+  printf("sequence = %d\n", m->sequence);
+  printf("size = %d\n", m->size);
+  printf("type = %d\n", m->type);
+
+  for (int i = 0; i < m->size; ++i) {
+    printf("%X ", m->data[i]);
+  }
+  puts("\n");
+}
 
 unsigned char compute_checksum(message *msg) {
   unsigned int sum = 0;
@@ -81,67 +95,34 @@ long long timestamp() {
   return tp.tv_sec * 1000 + tp.tv_usec / 1000;
 }
 
-// TODO:
-// adicionar possibilidade de mensagens terem pedacos em mais de um buffer
-// recebido atualmente a funcao assume que a mensagem esta contida inteira em um
-// buffer
-int message_receive(int socket, message *m, long long timeout) {
-#define BUFFERN 500
-  long long start_time = timestamp();
-  unsigned char buffer[BUFFERN];
+void message_send_and_receive(int socket, message *send, message *receive) {
+  int all_ok = 0;
+  static int max_timeout = 2048;
+  int timeout = 1;
 
-  do {
-    int buffer_n = recv(socket, buffer, BUFFERN, 0);
-    if (buffer_n == -1)
-      continue;
-    // printf("received buffer of size: %d\n", buffer_n);
+  message_send(socket, *send);
 
-    // search for start symbol
-    int start_index = -1;
-    for (int i = 0; i < buffer_n; ++i)
-      if (buffer[i] == 0b01111110) {
-        start_index = i;
-        break;
+  while (!all_ok) {
+    while (message_receive(socket, receive, timeout) == -1) {
+      timeout *= 2;
+      if (timeout > max_timeout) {
+        fprintf(stderr, "Resposta nao recebida, reenviando\n");
+        timeout = 1;
+        message_send(socket, *send);
       }
-    if (start_index == -1)
+    }
+
+
+    int sum = compute_checksum(receive);
+    if (sum != receive->checksum) {
+      // printf("checksum error, expected %d but found %d\n", sum, receive->checksum);
+      // message_debug_print(receive);
+      if (send->type != TYPE_NACK)
+        message_send(socket, *send);
       continue;
-    // printf("start symbol found at %d\n", start_index);
-
-    unsigned char m_size = (buffer[start_index + 1] >> 1) & 0x7f;
-    unsigned char m_sequence = (buffer[start_index + 1] & 0xfe) |
-                               ((buffer[start_index + 2] & 0xf0) >> 4);
-    unsigned char m_type = buffer[start_index + 2] & 0x0f;
-
-    unsigned char m_checksum = buffer[start_index + 3];
-
-    for (int i = 0; i < m_size; ++i)
-      m->data[i] = buffer[start_index + 4 + i];
-
-    m->size = m_size;
-    m->sequence = m_sequence;
-    m->type = m_type;
-    m->checksum = m_checksum;
-    return 0;
-  } while (timestamp() - start_time < timeout);
-
-  return -1;
-}
-
-int message_send(int socket, message m) {
-  unsigned char buffer[1 + 4 + 128];
-  buffer[0] = 0b01111110;
-  buffer[1] = (m.size << 1) | ((m.sequence >> 4) & 0x01);
-  buffer[2] = ((m.sequence & 0x0F) << 4) | (m.type & 0x0F);
-  buffer[3] = m.checksum;
-  for (int i = 0; i < m.size; ++i)
-    buffer[4 + i] = m.data[i];
-
-  int padding_size = (10 - m.size) > 0 ? 10 - m.size : 0;
-  if (send(socket, buffer, 4 + m.size + padding_size, 0) == -1) {
-    fprintf(stderr, "send() failed: %s\n", strerror(errno));
-    return -1;
+    }
+    all_ok = 1;
   }
-  return 0;
 }
 
 unsigned char **split_file(char *filename, int *bytes, int *count) {
@@ -180,3 +161,125 @@ unsigned char **split_file(char *filename, int *bytes, int *count) {
   *count = lcount;
   return array;
 }
+
+
+#define BUFFERN 1500 
+static unsigned char buffer[BUFFERN];
+static int data_in_buffer = 0; 
+int message_receive(int socket, message *m, long long timeout) {
+    long long start_time = timestamp();
+
+    while (1) {
+        // find a start marker
+        if (data_in_buffer > 0) {
+            int start_index = -1;
+            for (int i = 0; i < data_in_buffer; i++) {
+                if (buffer[i] == 0b01111110) {
+                    start_index = i;
+                    break;
+                }
+            }
+
+            if (start_index != -1) {
+                // discard garbage before the start marker
+                if (start_index > 0) {
+                    memmove(buffer, &buffer[start_index], data_in_buffer - start_index);
+                    data_in_buffer -= start_index;
+                }
+
+                unsigned char clean_frame[BUFFERN];
+                int clean_len = 0;
+                int raw_len = 1; // start after the 0x7E marker
+                int logical_size = -1;
+                int total_logical_len = -1;
+
+                while (raw_len < data_in_buffer) {
+                    // check for stuffing 
+                    if ((buffer[raw_len] == 0x88 || buffer[raw_len] == 0x81) && (raw_len + 1 < data_in_buffer) && buffer[raw_len + 1] == 0xFF) {
+                        clean_frame[clean_len++] = buffer[raw_len];
+                        raw_len += 2; 
+                    } else {
+                        clean_frame[clean_len++] = buffer[raw_len];
+                        raw_len += 1;
+                    }
+
+                    // parse message length
+                    if (logical_size == -1 && clean_len >= 3) {
+                        logical_size = (clean_frame[0] >> 1) & 0x7F;
+                        total_logical_len = 3 + logical_size; // 3 header bytes + data
+                    }
+
+                    if (total_logical_len != -1 && clean_len >= total_logical_len) {
+                        break; // exit unstuffing loop
+                    }
+                }
+
+                // check if successfully unstuffed a FULL frame
+                if (total_logical_len != -1 && clean_len >= total_logical_len) {
+                    m->size = logical_size;
+                    m->sequence = ((clean_frame[0] & 0x01) << 4) | ((clean_frame[1] & 0xF0) >> 4);
+                    m->type = clean_frame[1] & 0x0F;
+                    m->checksum = clean_frame[2];
+                    memcpy(m->data, &clean_frame[3], m->size);
+
+                    // remove the consumed raw bytes from the buffer
+                    memmove(buffer, &buffer[raw_len], data_in_buffer - raw_len);
+                    data_in_buffer -= raw_len;
+
+                    return 0;
+                }
+                // if we are here, it means we ran out of data in the buffer before
+                // building a full frame
+            } else {
+                // no start marker found, the whole buffer is garbage
+                data_in_buffer = 0;
+            }
+        }
+
+        // if we need more data, check for timeout and receive
+        if (timestamp() - start_time >= timeout) return -1;
+
+        if (data_in_buffer >= BUFFERN) data_in_buffer = 0;
+
+        int bytes_read = recv(socket, &buffer[data_in_buffer], BUFFERN - data_in_buffer, 0);
+        if (bytes_read > 0) {
+            data_in_buffer += bytes_read;
+        } else if (bytes_read == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            perror("recv");
+            return -1;
+        }
+    }
+}
+
+int message_send(int socket, message m) {
+    // original buffer beofre stuffing
+    unsigned char original_buffer[3 + 128]; // 3 for header, 127 for data
+    original_buffer[0] = (m.size << 1) | ((m.sequence >> 4) & 0x01);
+    original_buffer[1] = ((m.sequence & 0x0F) << 4) | (m.type & 0x0F);
+    original_buffer[2] = m.checksum;
+    memcpy(&original_buffer[3], m.data, m.size);
+    int original_len = 3 + m.size;
+
+    // final buffer with start marker and stuffing
+    unsigned char final_buffer[1 + (sizeof(original_buffer) * 2)];
+    final_buffer[0] = 0b01111110;
+    int final_len = 1;
+
+    // byte stuffing
+    for (int i = 0; i < original_len; i++) {
+        unsigned char byte = original_buffer[i];
+        if (byte == 0x88 || byte == 0x81) {
+            final_buffer[final_len++] = byte;
+            final_buffer[final_len++] = 0xFF; 
+        } else {
+            final_buffer[final_len++] = byte;
+        }
+    }
+
+    if (send(socket, final_buffer, final_len >= 14 ? final_len : 14, 0) == -1) {
+        fprintf(stderr, "send() failed: %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+

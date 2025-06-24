@@ -1,8 +1,10 @@
 CLIENT_TARGET = client
 SERVER_TARGET = server
 CC = gcc
-CFLAGS = -Wall -g -Iservidor -Itransmissor -Icliente
 OBJ = $(SRC:.c=.o)
+USER := $(shell whoami)
+UID := $(shell id -u)
+CFLAGS = -Wall -g -Iservidor -Itransmissor -Icliente -DUSER=\"$(USER)\" -DUID=$(UID)
 
 CLIENT_SRC = cliente/cliente.c transmissor/transmissor.c
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
@@ -21,6 +23,7 @@ $(SERVER_TARGET): $(SERVER_OBJ)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+	echo user $(USER) uid $(UID)
 
 clean:
 	rm -f $(SERVER_TARGET) $(CLIENT_TARGET) *.o transmissor/*.o cliente/*.o servidor/*.o

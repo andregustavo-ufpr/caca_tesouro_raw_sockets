@@ -35,10 +35,12 @@ typedef struct {
   unsigned char sequence;  // 5 bits
   unsigned char type;      // 4 bits
   unsigned char checksum;  // 8 bits (byte)
-  unsigned char data[128]; // tamanho maximo (127) + 1 para caber \0
+  unsigned char data[128]; // tamanho maximo (127)
 } message;
 
 unsigned char compute_checksum(message *msg);
+
+void message_debug_print(message* m);
 
 message create_message(unsigned char size, unsigned char sequence,
                        unsigned char type, unsigned char *data);
@@ -50,6 +52,8 @@ message create_message(unsigned char size, unsigned char sequence,
 unsigned char **split_file(char *filename, int *bytes, int *count);
 
 int cria_raw_socket(char *nome_interface_rede);
+
+void message_send_and_receive(int socket, message *send, message *receive);
 
 // return 0 on succes -1 on timeout
 int message_receive(int socket, message *m, long long timeout);

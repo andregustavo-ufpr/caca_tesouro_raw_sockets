@@ -16,27 +16,59 @@ int storedClientYPos = 0;
 
 int r_socket;
 
+#define MAX_TIMEOUT 2048
+long long timeout = 1;
 
 void send_file_in_chunks(unsigned char **file_chunks, int size, int batches, const char *file_path) {
-    int sequence = 0;
+    message response;
+    size_t bytes_sent = 0;
 
-    message start_message = create_message(sizeof(file_path), sequence, TYPE_TEXTACKNAME, (unsigned char *) file_path);
-    message_send(r_socket, start_message);
-    sequence++;
+    int type;
+    if (strstr(file_path, "txt"))
+        type = TYPE_TEXTACKNAME;
+    else if (strstr(file_path, "mp4"))
+        type = TYPE_VIDEOACKNAME;
+    else
+        type = TYPE_IMAGEACKNAME;
 
-    message size_message = create_message(sizeof(size), sequence, TYPE_SIZE,  (unsigned char*)&size);
-    message_send(r_socket, size_message);
-    sequence++;
+    message start_message = create_message(5, 0, type, (unsigned char *) file_path);
+    do {
+        message_send_and_receive(r_socket, &start_message, &response);
+    } while (response.type != TYPE_ACK);
+
+
+    message size_message = create_message(sizeof(size), 0, TYPE_SIZE,  (unsigned char*)&size);
+    do {
+        message_send_and_receive(r_socket, &size_message, &response);
+    } while (response.type != TYPE_ACK);
     
-    for(int i = 0; i < batches; i++){
-        message file_piece = create_message(CHUNK_SIZE, sequence, TYPE_DATA, file_chunks[i]);
-        message_send(r_socket, file_piece);
-        sequence++;
+    size_t i = 0;
+    while (i < batches){
+        size_t bytes_to_send = size - bytes_sent;
+        message file_piece = create_message(bytes_to_send >= CHUNK_SIZE ? 127 : bytes_to_send, i%32, TYPE_DATA, file_chunks[i]);
+        do {
+            do {
+                message_send_and_receive(r_socket, &file_piece, &response);
+            } while(response.type != TYPE_ACK);
+
+            if (response.sequence == i%32) {
+                break;
+            }
+            else {
+                continue;
+            }
+
+        } while (1);
+        bytes_sent += file_piece.size;
+        i += 1;
     }
 
-    message end_message = create_message(0, sequence, TYPE_ENDOFFILE, NULL);
-    message_send(r_socket, end_message);
+    message end_message = create_message(0, 0, TYPE_ENDOFFILE, NULL);
+    do {
+        message_send_and_receive(r_socket, &end_message, &response);
+    } while (response.type != TYPE_ACK);
 
+    printf("envio de arquivo completo\n");
     return;
 }
 
@@ -55,7 +87,7 @@ void find_object(int n, char* out_path){
         if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) {
             strcpy(out_path, entry->d_name);
             
-            char full_path[8] = "objects/";
+            char full_path[64] = "objects/";
             sprintf(full_path + strlen(full_path), "%s", out_path);
             int file_size = 0;
             int batches_qtt = 0;
@@ -150,11 +182,8 @@ int main(int argc, char** argv){
     }
     r_socket = cria_raw_socket(argv[1]); // Make connection with client
     message recieved_message;
-    memset(&recieved_message, 0, sizeof(message));
+    // memset(&recieved_message, 0, sizeof(message));
 
-    #ifdef USINGLOOPBACK
-    message dummy;
-    #endif
 
     choose_random_coordinates(treasures);
     printf("Locais de tesouro:\n");
@@ -164,41 +193,30 @@ int main(int argc, char** argv){
     printf("\n");
 
     while(1){
-        #ifdef USINGLOOPBACK
-        message_receive(r_socket, &dummy, TIMEOUT);
-        #endif
         int recieved = message_receive(r_socket, &recieved_message, TIMEOUT);
 
-        if (compute_checksum(&recieved_message) != recieved_message.checksum) {
-            printf("checksum failed\n");
-            continue;
-        }
 
         if(recieved != -1){
+            if (compute_checksum(&recieved_message) != recieved_message.checksum) {
+                continue;
+            }
+
             printf("received type %d\n", recieved_message.type);
             int computed = message_handler(&recieved_message);
-
             
             if (computed > 0) {
                 char object_name[64];
-                printf("Tesouro %d encontrado\n", 1);
-                find_object(1, object_name);
-                printf("Tesouro: %s\n", object_name);
+                find_object(computed, object_name);
+                printf("Tesouro %s enviado\n", object_name);
             }
             else if (computed == 0) {
                 message ok_msg = create_message(0, 0, TYPE_OKACK, NULL);
 
                 message_send(r_socket, ok_msg);
-                #ifdef USINGLOOPBACK
-                message_receive(r_socket, &dummy, TIMEOUT);
-                #endif
             } else if (computed == -2) {
                 message err_msg = create_message(0, 0, TYPE_ERROR, NULL);
 
                 message_send(r_socket, err_msg);
-                #ifdef USINGLOOPBACK
-                message_receive(r_socket, &dummy, TIMEOUT);
-                #endif
                 exit(1);
             }
         }
