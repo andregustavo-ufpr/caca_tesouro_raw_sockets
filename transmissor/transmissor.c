@@ -98,28 +98,27 @@ long long timestamp() {
 void message_send_and_receive(int socket, message *send, message *receive) {
   int all_ok = 0;
   static int max_timeout = 2048;
-  int timeout = 1;
+  int timeout = 64;
+  message nack = create_message(0, 0, TYPE_NACK, NULL);
 
   message_send(socket, *send);
 
   while (!all_ok) {
     while (message_receive(socket, receive, timeout) == -1) {
-      timeout *= 2;
-      if (timeout > max_timeout) {
-        fprintf(stderr, "Resposta nao recebida, reenviando\n");
-        timeout = 1;
-        message_send(socket, *send);
+      if (timeout <= max_timeout) {
+        timeout *= 2;
       }
+      fprintf(stderr, "Resposta nao recebida, reenviando\n");
+      message_send(socket, *send);
     }
 
 
     int sum = compute_checksum(receive);
     if (sum != receive->checksum) {
-      // printf("checksum error, expected %d but found %d\n", sum, receive->checksum);
-      // message_debug_print(receive);
-      if (send->type != TYPE_NACK)
-        message_send(socket, *send);
-      continue;
+      // if (send->type != TYPE_NACK)
+      //   message_send(socket, *send);
+      // continue;
+      message_send(socket, nack);
     }
     all_ok = 1;
   }
