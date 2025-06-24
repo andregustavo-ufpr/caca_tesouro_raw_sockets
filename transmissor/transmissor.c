@@ -98,8 +98,7 @@ long long timestamp() {
 void message_send_and_receive(int socket, message *send, message *receive) {
   int all_ok = 0;
   static int max_timeout = 2048;
-  int timeout = 64;
-  message nack = create_message(0, 0, TYPE_NACK, NULL);
+  int timeout = 128;
 
   message_send(socket, *send);
 
@@ -115,10 +114,9 @@ void message_send_and_receive(int socket, message *send, message *receive) {
 
     int sum = compute_checksum(receive);
     if (sum != receive->checksum) {
-      // if (send->type != TYPE_NACK)
-      //   message_send(socket, *send);
-      // continue;
-      message_send(socket, nack);
+      if (send->type != TYPE_NACK)
+        message_send(socket, *send);
+      continue;
     }
     all_ok = 1;
   }
